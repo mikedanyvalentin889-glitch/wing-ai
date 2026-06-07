@@ -862,32 +862,43 @@ function toggleChip(el, type) {
   else vibes.push(text);
 }
 
-// CLAUDE API CALL
+// OPENROUTER API CALL
 async function callClaude(systemPrompt, userContent) {
-  const key = getKey() || localStorage.getItem('wm_key');
-  if (!key) {
-    showToast('❌ Add your API key first!');
-    return null;
-  }
+  const key = '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';
 
   const isMultiModal = Array.isArray(userContent);
+  const model = isMultiModal
+    ? 'meta-llama/llama-3.2-11b-vision-instruct:free'
+    : 'meta-llama/llama-3.3-70b-instruct:free';
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  // Build content for OpenRouter format
+  let msgContent;
+  if (isMultiModal) {
+    msgContent = userContent.map(item => {
+      if (item.type === 'image') {
+        return { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + item.source.data } };
+      }
+      return { type: 'text', text: item.text };
+    });
+  } else {
+    msgContent = userContent;
+  }
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
+      'Authorization': 'Bearer ' + key,
+      'HTTP-Referer': 'https://wing-ai-beige.vercel.app',
+      'X-Title': 'Wingman AI'
     },
     body: JSON.stringify({
-      model: 'claude-opus-4-5',
+      model: model,
       max_tokens: 2000,
-      system: systemPrompt,
-      messages: [{
-        role: 'user',
-        content: isMultiModal ? userContent : [{ type: 'text', text: userContent }]
-      }]
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: msgContent }
+      ]
     })
   });
 
@@ -897,7 +908,7 @@ async function callClaude(systemPrompt, userContent) {
   }
 
   const data = await response.json();
-  return data.content[0].text;
+  return data.choices[0].message.content;
 }
 
 // SCREENSHOT GENERATE
